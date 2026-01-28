@@ -87,4 +87,23 @@ if uploaded_file:
         st.subheader("📋 最终数据预览")
         
         # 设置显示给用户的列名 (你可以根据业务改这里)
-        final_df.columns = ["产品/A列", "C列信息", "B
+        final_df.columns = ["产品/A列", "C列信息", "B列信息", "E列数据", "F列数据"]
+        
+        st.dataframe(final_df.head(20))
+        
+        st.markdown("### 📥 导出")
+        
+        # 导出 CSV
+        csv_data = final_df.to_csv(index=False, header=False, encoding='utf-8-sig').encode('utf-8-sig')
+        
+        st.download_button(
+            label="下载最终 CSV (纯净数据)",
+            data=csv_data,
+            file_name="基础数据提取结果.csv",
+            mime="text/csv"
+        )
+            
+    except Exception as e:
+        st.error(f"发生错误: {e}")
+else:
+    st.info("👆 请上传文件")

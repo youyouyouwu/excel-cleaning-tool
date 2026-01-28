@@ -1,34 +1,59 @@
 import streamlit as st
 import pandas as pd
-import io
 
-st.set_page_config(page_title="数据清洗实验室", layout="wide")
-st.title("🛠️ 业务报表清洗 - 调试模式")
+st.set_page_config(page_title="固定位置提取工具", layout="wide")
+st.title("🎯 锁定提取：Excel 第3张表 - A列")
 
-# 1. 支持上传 xlsm (带宏文件)
-uploaded_file = st.file_uploader("请上传你的基础表格 (.xlsx, .xlsm)", type=["xlsx", "xlsm"])
+uploaded_file = st.file_uploader("上传 Excel 文件 (.xlsx, .xlsm)", type=["xlsx", "xlsm"])
 
 if uploaded_file:
-    st.markdown("---")
-    st.subheader("1. 寻找表头 (Header)")
-    
-    # 让用户动态调整表头位置，找到数据的“第一行”
-    header_idx = st.slider("请拖动滑块，直到下方的表格【第一行】显示为正确的中文列名", 0, 10, 0)
-    
     try:
-        # 强制用 openpyxl 引擎读取，兼容 xlsm
-        df_raw = pd.read_excel(uploaded_file, header=header_idx, engine='openpyxl')
+        # 1. 获取所有 Sheet 名称列表
+        xl_file = pd.ExcelFile(uploaded_file, engine='openpyxl')
+        sheet_names = xl_file.sheet_names
         
-        # 显示前 20 行数据让用户看
-        st.dataframe(df_raw.head(20))
+        # -------------------------------------------------------
+        # 核心修改：强制锁定第 3 张表 (索引为 2，因为计算机从0开始数)
+        # -------------------------------------------------------
+        target_index = 2  # 0是第1张，1是第2张，2是第3张
         
-        st.markdown("---")
-        st.subheader("2. 请根据上表回答我的问题")
-        st.info("数据已加载。现在请在聊天框告诉我下一步的要求。")
+        # 安全检查：万一文件里只有1张表，防止报错
+        if len(sheet_names) > target_index:
+            target_sheet_name = sheet_names[target_index]
+            st.success(f"已锁定第 3 张表，检测到表名为：【{target_sheet_name}】")
+        else:
+            # 如果表不够3张，默认取最后一张
+            target_sheet_name = sheet_names[-1]
+            st.warning(f"警告：文件少于3个表，已自动选择最后一张：【{target_sheet_name}】")
+
+        # 2. 读取数据 (只读 A 列)
+        st.info(f"正在读取 A 列并执行【炸开合并单元格】...")
         
-        # 显示列名列表，方便复制
-        with st.expander("点击查看所有识别到的列名"):
-            st.write(list(df_raw.columns))
+        df = pd.read_excel(uploaded_file, sheet_name=target_sheet_name, header=None, usecols="A")
+        df.columns = ["原始数据"]
+        
+        # 3. 炸开合并单元格 (向下填充)
+        df["清洗后数据"] = df["原始数据"].ffill()
+        
+        # 4. 展示前20行供检查
+        st.subheader("数据预览 (前20行)")
+        st.dataframe(df.head(20))
             
+        # 5. 导出 CSV
+        result_df = df[["清洗后数据"]]
+        # 这里的 header=False 表示导出的 CSV 不带表头，纯数据
+        # 如果你需要表头，把 header=False 改成 header=["业务数据"]
+        csv_data = result_df.to_csv(index=False, header=False, encoding='utf-8-sig').encode('utf-8-sig')
+        
+        st.download_button(
+            label=f"📥 下载 CSV ({target_sheet_name}_A列.csv)",
+            data=csv_data,
+            file_name=f"{target_sheet_name}_A列.csv",
+            mime="text/csv"
+        )
+        
     except Exception as e:
-        st.error(f"读取出错: {e}")
+        st.error(f"处理出错: {e}")
+
+else:
+    st.info("👆 请上传文件，我将自动提取【第 3 张表】的 A 列")

@@ -1,34 +1,34 @@
 import streamlit as st
 import pandas as pd
 
-st.set_page_config(page_title="数据清洗最终版", layout="wide")
-st.title("🏭 混合提取模式：炸开填充 + 原样保留")
+st.set_page_config(page_title="纯净数据提取工具", layout="wide")
+st.title("🏭 基础数据提取 (5列精准版)")
 
 uploaded_file = st.file_uploader("上传 Excel 文件 (.xlsx, .xlsm)", type=["xlsx", "xlsm"])
 
 if uploaded_file:
     try:
-        # 1. 解析结构
+        # 1. 解析 Excel 结构
         xl_file = pd.ExcelFile(uploaded_file, engine='openpyxl')
         sheet_names = xl_file.sheet_names
         
+        # 检查表数量
         if len(sheet_names) < 4:
-            st.error("❌ 文件Sheet数量不足4个")
+            st.error("❌ 文件Sheet数量不足4个，无法定位目标表。")
             st.stop()
             
-        # 锁定表名 (按位置)
+        # 锁定表名 (按固定位置：第3张和第4张)
         sheet3_name = sheet_names[2]
         sheet4_name = sheet_names[3]
         
-        st.success(f"已锁定源表：【{sheet3_name}】 和 【{sheet4_name}】")
+        st.success(f"已锁定源数据表：1.【{sheet3_name}】  2.【{sheet4_name}】")
 
         # ========================================================
-        # 核心逻辑 A: 处理 Sheet3 (混合模式)
+        # 步骤 A: 处理 Sheet3 (混合提取)
         # ========================================================
-        # 一次性读取 A, C, E, F 四列
-        # usecols="A,C,E,F" -> 读进来后顺序是 A, C, E, F (索引 0,1,2,3)
-        st.info("正在处理 Sheet3 (A/C列炸开，E/F列保持原样)...")
+        st.info("正在提取 Sheet3 (A/C炸开，E/F保留原样)...")
         
+        # 一次性读取 A,C,E,F 四列，强制文本格式
         df_s3 = pd.read_excel(
             uploaded_file, 
             sheet_name=sheet3_name, 
@@ -36,22 +36,23 @@ if uploaded_file:
             usecols="A,C,E,F", 
             dtype=str
         )
+        # 赋予临时列名，防止混淆
+        df_s3.columns = ["Raw_A", "Raw_C", "Raw_E", "Raw_F"]
         
-        # 给列起个内部代号，方便操作
-        df_s3.columns = ["Col_A", "Col_C", "Col_E", "Col_F"]
+        # --- 关键清洗逻辑 ---
+        # 1. 炸开组：A列 和 C列 (向下填充)
+        df_s3["Raw_A"] = df_s3["Raw_A"].ffill()
+        df_s3["Raw_C"] = df_s3["Raw_C"].ffill()
         
-        # --- 局部炸开逻辑 ---
-        # 只对 A列 和 C列 进行向下填充 (ffill)
-        df_s3["Col_A"] = df_s3["Col_A"].ffill()
-        df_s3["Col_C"] = df_s3["Col_C"].ffill()
-        # E列 和 F列 咱们不动它，保持原样
+        # 2. 原样组：E列 和 F列 (不做任何操作，保持原汁原味)
         
+        # 重置索引，确保对齐
         df_s3.reset_index(drop=True, inplace=True)
 
         # ========================================================
-        # 核心逻辑 B: 处理 Sheet4 (炸开模式)
+        # 步骤 B: 处理 Sheet4 (单列炸开)
         # ========================================================
-        st.info("正在处理 Sheet4 (B列炸开)...")
+        st.info("正在提取 Sheet4 (B列炸开)...")
         
         df_s4 = pd.read_excel(
             uploaded_file, 
@@ -65,41 +66,25 @@ if uploaded_file:
         df_s4.reset_index(drop=True, inplace=True)
 
         # ========================================================
-        # 核心逻辑 C: 最终组装
+        # 步骤 C: 最终组装 (拼接)
         # ========================================================
-        # 现在的顺序要求：
-        # 1. Sheet3-A (炸开)
-        # 2. Sheet3-C (炸开)
-        # 3. Sheet4-B (炸开)
-        # 4. Sheet3-E (原样)
-        # 5. Sheet3-F (原样)
-        
+        # 顺序：Sheet3-A -> Sheet3-C -> Sheet4-B -> Sheet3-E -> Sheet3-F
         final_df = pd.concat([
-            df_s3["Col_A"], 
-            df_s3["Col_C"], 
-            df_s4.iloc[:, 0], # Sheet4只有一列
-            df_s3["Col_E"], 
-            df_s3["Col_F"]
+            df_s3["Raw_A"], 
+            df_s3["Raw_C"], 
+            df_s4.iloc[:, 0], 
+            df_s3["Raw_E"], 
+            df_s3["Raw_F"]
         ], axis=1)
         
-        # 清理 'nan' 文本 -> 变回空值
+        # 清理因为强制文本模式产生的 "nan" 字符串
         final_df = final_df.replace("nan", "")
 
-        # 预览
-        st.subheader("数据预览 (前15行)")
-        st.dataframe(final_df.head(15))
+        # ========================================================
+        # 步骤 D: 预览与导出
+        # ========================================================
+        st.markdown("---")
+        st.subheader("📋 最终数据预览")
         
-        # 导出
-        csv_data = final_df.to_csv(index=False, header=False, encoding='utf-8-sig').encode('utf-8-sig')
-        
-        st.download_button(
-            label="📥 下载 CSV (包含 A,C,B,E,F 五列)",
-            data=csv_data,
-            file_name="提取结果_5列完整版.csv",
-            mime="text/csv"
-        )
-        
-    except Exception as e:
-        st.error(f"发生错误: {e}")
-else:
-    st.info("👆 请上传文件")
+        # 设置显示给用户的列名 (你可以根据业务改这里)
+        final_df.columns = ["产品/A列", "C列信息", "B

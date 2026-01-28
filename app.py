@@ -2,8 +2,8 @@ import streamlit as st
 import pandas as pd
 
 st.set_page_config(page_title="数据清洗最终版", layout="wide")
-st.title("🏭 6列精准提取：S3(A,C,E,F) + S4(B,I)")
-st.markdown("### ✅ 配置更新：Sheet4-I列 已设为【原样保留】")
+st.title("🏭 12列精准提取：S3(多列) + S4(B,I)")
+st.markdown("### ✅ 配置：新增 S3 的 N/O/AE/AB/AC/AF 列 (原样保留)")
 
 uploaded_file = st.file_uploader("上传 Excel 文件 (.xlsx, .xlsm)", type=["xlsx", "xlsm"])
 
@@ -23,31 +23,44 @@ if uploaded_file:
         st.success(f"已锁定：1.【{sheet3_name}】  2.【{sheet4_name}】")
 
         # ========================================================
-        # 步骤 A: 处理 Sheet3 (4列)
+        # 步骤 A: 处理 Sheet3 (读取所有需要的列)
         # ========================================================
-        st.info("正在提取 Sheet3 (A/C炸开，E/F原样)...")
+        st.info("正在提取 Sheet3 数据...")
+        
+        # 技巧：usecols 可以乱序写，但 Pandas 读进来会按 Excel 原始顺序(左->右)排列
+        # 我们这里把所有要用的列都写上
+        cols_to_read = "A,C,E,F,N,O,AE,AB,AC,AF"
         
         df_s3 = pd.read_excel(
             uploaded_file, 
             sheet_name=sheet3_name, 
             header=None, 
-            usecols="A,C,E,F", 
+            usecols=cols_to_read, 
             dtype=str
         )
-        df_s3.columns = ["S3_A", "S3_C", "S3_E", "S3_F"]
+        
+        # ⚠️ 关键：Pandas 读取后的列顺序是 Excel 的物理顺序：
+        # A, C, E, F, N, O, AB, AC, AE, AF  (注意 AB 在 AE 前面)
+        # 我们必须按这个顺序给它们起内部代号，后面才能拼对
+        df_s3.columns = [
+            "S3_A", "S3_C", "S3_E", "S3_F", "S3_N", "S3_O", 
+            "S3_AB", "S3_AC", "S3_AE", "S3_AF"
+        ]
         
         # --- Sheet3 清洗逻辑 ---
-        # A列、C列 -> 炸开
+        # 1. 炸开组 (分类信息)
         df_s3["S3_A"] = df_s3["S3_A"].ffill()
         df_s3["S3_C"] = df_s3["S3_C"].ffill()
-        # E列、F列 -> 保持原样 (不动)
+        
+        # 2. 原样组 (E, F, N, O, AE, AB, AC, AF)
+        # 这些列保持不动，防止数据篡改
         
         df_s3.reset_index(drop=True, inplace=True)
 
         # ========================================================
-        # 步骤 B: 处理 Sheet4 (2列：B和I)
+        # 步骤 B: 处理 Sheet4 (B, I)
         # ========================================================
-        st.info("正在提取 Sheet4 (B列炸开，I列原样)...")
+        st.info("正在提取 Sheet4 数据...")
         
         df_s4 = pd.read_excel(
             uploaded_file, 
@@ -57,51 +70,55 @@ if uploaded_file:
             dtype=str
         )
         
-        # 容错处理：防止I列没数据导致列数不够
         if df_s4.shape[1] == 1:
             df_s4["S4_I"] = ""
-            df_s4.columns = ["S4_B", "S4_I"]
-        else:
-            df_s4.columns = ["S4_B", "S4_I"]
         
-        # --- Sheet4 关键修改 ---
-        # 1. B列 -> 继续炸开 (它是分类信息)
-        df_s4["S4_B"] = df_s4["S4_B"].ffill()
+        df_s4.columns = ["S4_B", "S4_I"]
         
-        # 2. 🛑 I列 -> 原样保留！(注释掉了之前的 ffill)
-        # df_s4["S4_I"] = df_s4["S4_I"].ffill()  <-- 已禁用
+        # Sheet4 清洗
+        df_s4["S4_B"] = df_s4["S4_B"].ffill() # B列炸开
+        # I列原样 (不动)
         
         df_s4.reset_index(drop=True, inplace=True)
 
         # ========================================================
-        # 步骤 C: 最终 6 列组装
+        # 步骤 C: 最终 12 列组装 (严格按您要求的顺序)
         # ========================================================
-        # 顺序：S3-A, S3-C, S4-B, S4-I, S3-E, S3-F
+        # 目标顺序：
+        # A, B, C, D, E, F (前6列旧逻辑)
+        # G: S3_N
+        # H: S3_O
+        # I: S3_AE  <-- 注意顺序
+        # J: S3_AB
+        # K: S3_AC
+        # L: S3_AF
         
         final_df = pd.concat([
-            df_s3["S3_A"],       # 第1列
-            df_s3["S3_C"],       # 第2列
-            df_s4["S4_B"],       # 第3列
-            df_s4["S4_I"],       # 第4列 (原样)
-            df_s3["S3_E"],       # 第5列 (原样)
-            df_s3["S3_F"]        # 第6列 (原样)
+            df_s3["S3_A"],    # Result A
+            df_s3["S3_C"],    # Result B
+            df_s4["S4_B"],    # Result C
+            df_s4["S4_I"],    # Result D
+            df_s3["S3_E"],    # Result E
+            df_s3["S3_F"],    # Result F
+            df_s3["S3_N"],    # Result G (新)
+            df_s3["S3_O"],    # Result H (新)
+            df_s3["S3_AE"],   # Result I (新) -> 您的要求
+            df_s3["S3_AB"],   # Result J (新)
+            df_s3["S3_AC"],   # Result K (新)
+            df_s3["S3_AF"]    # Result L (新)
         ], axis=1)
         
-        # 清理文本模式带来的 nan 字符
         final_df = final_df.replace("nan", "")
 
         # ========================================================
         # 步骤 D: 预览与导出
         # ========================================================
-        st.subheader("📋 6列数据预览 (I列空值已保留)")
+        st.subheader("📋 12列数据预览")
         
+        # 设置表头用于预览 (不影响CSV)
         final_df.columns = [
-            "A列(炸开)", 
-            "B列(炸开)", 
-            "C列(炸开)", 
-            "D列(S4-I原样)", 
-            "E列(S3-E原样)", 
-            "F列(S3-F原样)"
+            "A:产品(炸)", "B:C列(炸)", "C:S4-B(炸)", "D:S4-I", "E:S3-E", "F:S3-F",
+            "G:S3-N", "H:S3-O", "I:S3-AE", "J:S3-AB", "K:S3-AC", "L:S3-AF"
         ]
         
         st.dataframe(final_df.head(15))
@@ -109,9 +126,9 @@ if uploaded_file:
         csv_data = final_df.to_csv(index=False, header=False, encoding='utf-8-sig').encode('utf-8-sig')
         
         st.download_button(
-            label="📥 下载 CSV (最终版)",
+            label="📥 下载 CSV (12列完整版)",
             data=csv_data,
-            file_name="6列数据_I列原样.csv",
+            file_name="12列数据提取结果.csv",
             mime="text/csv"
         )
         

@@ -3,7 +3,7 @@ import pandas as pd
 
 st.set_page_config(page_title="综合管理表格数据清洗", layout="wide")
 st.title("🏭 13列精准提取：S3 + S4 + S5(L) + N(S3-B)")
-st.markdown("### ✅ 配置更新：M 列提取 Sheet5 的 L 列；新增 N 列：Sheet3(1.COUPANG) 的 B 列")
+st.markdown("### ✅ 配置更新：M 列提取 Sheet5 的 L 列；新增 N 列：Sheet3(1.COUPANG) 的 B 列（不向下填充）")
 
 uploaded_file = st.file_uploader("上传 Excel 文件 (.xlsx, .xlsm)", type=["xlsx", "xlsm"])
 
@@ -31,6 +31,7 @@ if uploaded_file:
             st.error(f"❌ 文件只有 {len(sheet_names)} 个Sheet，无法读取 Sheet5 (第5张表)！")
             st.stop()
 
+        # 依旧按你原逻辑：第3/4/5张表
         sheet3_name = sheet_names[2]
         sheet4_name = sheet_names[3]
         sheet5_name = sheet_names[4]
@@ -41,8 +42,8 @@ if uploaded_file:
         # 步骤 A: 处理 Sheet3（读取 11 列：新增 B）
         # ========================================================
         set_step(20, "正在提取 Sheet3 数据（A,B,C,E,F,N,O,AE,AB,AC,AF）...")
-        cols_to_read = "A,B,C,E,F,N,O,AE,AB,AC,AF"
 
+        cols_to_read = "A,B,C,E,F,N,O,AE,AB,AC,AF"
         df_s3 = pd.read_excel(
             uploaded_file,
             sheet_name=sheet3_name,
@@ -52,7 +53,7 @@ if uploaded_file:
             engine="openpyxl"
         )
 
-        # 补全列防报错（现在应为 11 列）
+        # 补全列防报错（应为 11 列）
         while df_s3.shape[1] < 11:
             df_s3[f"Auto_{df_s3.shape[1]}"] = ""
 
@@ -62,10 +63,14 @@ if uploaded_file:
             "S3_AE", "S3_AB", "S3_AC", "S3_AF"
         ]
 
-        # 清洗：A/C 炸开；B 也炸开（保证“所有结果”完整）
+        # ✅ 关键修复：
+        # A / C 继续向下填充（维持你原逻辑）
         df_s3["S3_A"] = df_s3["S3_A"].ffill()
-        df_s3["S3_B"] = df_s3["S3_B"].ffill()
         df_s3["S3_C"] = df_s3["S3_C"].ffill()
+
+        # ❌ B 列绝对不要 ffill，否则 Y 会“向下扩散”
+        # df_s3["S3_B"] = df_s3["S3_B"].ffill()  # ← 已删除
+
         df_s3.reset_index(drop=True, inplace=True)
 
         set_step(45, "✅ Sheet3 提取完成，正在提取 Sheet4 数据（B,I）...")
@@ -88,7 +93,7 @@ if uploaded_file:
 
         df_s4.columns = ["S4_B", "S4_I"]
 
-        # 清洗：B 炸开，I 原样
+        # 清洗：B 炸开，I 原样（保持你原逻辑）
         df_s4["S4_B"] = df_s4["S4_B"].ffill()
         df_s4.reset_index(drop=True, inplace=True)
 
@@ -106,7 +111,6 @@ if uploaded_file:
             engine="openpyxl"
         )
 
-        # 容错：万一 Sheet5 空的连 L 列都没有
         if df_s5.shape[1] == 0:
             df_s5["S5_L"] = ""
         else:
@@ -117,7 +121,7 @@ if uploaded_file:
         set_step(80, "✅ Sheet5 提取完成，正在组装最终结果...")
 
         # ========================================================
-        # 步骤 D: 最终 14 列组装（新增 N=Sheet3 B列）
+        # 步骤 D: 最终 14 列组装（N=Sheet3 B列，保持原样）
         # ========================================================
         final_df = pd.concat([
             df_s3["S3_A"],    # A
@@ -132,12 +136,12 @@ if uploaded_file:
             df_s3["S3_AB"],   # J
             df_s3["S3_AC"],   # K
             df_s3["S3_AF"],   # L
-            df_s5["S5_L"],    # M (Sheet5 的 L)
-            df_s3["S3_B"],    # N ✅ (Sheet3 的 B)
+            df_s5["S5_L"],    # M
+            df_s3["S3_B"],    # N ✅（不会扩散Y）
         ], axis=1)
 
-        # 清理 nan 字符串
-        final_df = final_df.replace("nan", "")
+        # 清理 nan 字符串 / None
+        final_df = final_df.replace(["nan", "None"], "")
 
         # 🧹 ID 列深度清洗（第4列，索引3）
         def clean_id(val):
@@ -167,7 +171,7 @@ if uploaded_file:
         st.dataframe(
             final_df,
             use_container_width=True,
-            height=1000  # ✅ 想更长就改大，比如 1200/1500
+            height=1100
         )
 
         csv_data = final_df.to_csv(index=False, header=False, encoding="utf-8-sig").encode("utf-8-sig")

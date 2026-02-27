@@ -3,7 +3,7 @@ import pandas as pd
 import io
 
 st.set_page_config(page_title="综合管理表格数据清洗", layout="wide")
-st.title("🏭 13列精准提取：S3 + S4 + S5(L)")
+st.title("🏭 综合管理【清洗完成】")
 st.markdown("### ✅ 配置更新：M 列改为提取 Sheet5 的 L 列")
 
 uploaded_file = st.file_uploader("上传 Excel 文件 (.xlsx, .xlsm)", type=["xlsx", "xlsm"])
@@ -26,11 +26,12 @@ if uploaded_file:
         st.success(f"已锁定源表：\n1. {sheet3_name}\n2. {sheet4_name}\n3. {sheet5_name}")
 
         # ========================================================
-        # 步骤 A: 处理 Sheet3 (读取 10 列)
+        # 步骤 A: 处理 Sheet3 (读取 11 列：新增 B 列)
         # ========================================================
         st.info("正在提取 Sheet3 数据...")
         
-        cols_to_read = "A,C,E,F,N,O,AE,AB,AC,AF"
+        # ✅ 只新增 B：原来是 A,C,E,F,N,O,AE,AB,AC,AF
+        cols_to_read = "A,B,C,E,F,N,O,AE,AB,AC,AF"
         
         df_s3 = pd.read_excel(
             uploaded_file, 
@@ -40,19 +41,21 @@ if uploaded_file:
             dtype=str
         )
         
-        # 补全列防报错
-        while df_s3.shape[1] < 10:
+        # 补全列防报错（现在是 11 列）
+        while df_s3.shape[1] < 11:
             df_s3[f"Auto_{df_s3.shape[1]}"] = ""
             
-        df_s3 = df_s3.iloc[:, :10]
+        df_s3 = df_s3.iloc[:, :11]
         
+        # ✅ 新增 S3_B
         df_s3.columns = [
-            "S3_A", "S3_C", "S3_E", "S3_F", "S3_N", "S3_O", 
+            "S3_A", "S3_B", "S3_C", "S3_E", "S3_F", "S3_N", "S3_O", 
             "S3_AB", "S3_AC", "S3_AE", "S3_AF"
         ]
         
-        # 清洗：A/C 炸开
+        # 清洗：A/C 炸开（✅按你的风格，B 也炸开，保证“所有结果”更完整）
         df_s3["S3_A"] = df_s3["S3_A"].ffill()
+        df_s3["S3_B"] = df_s3["S3_B"].ffill()
         df_s3["S3_C"] = df_s3["S3_C"].ffill()
         df_s3.reset_index(drop=True, inplace=True)
 
@@ -97,17 +100,11 @@ if uploaded_file:
         else:
             df_s5.columns = ["S5_L"]
             
-        # 清洗：通常 L 列是数值，我们保持原样 (不炸开)
-        # 如果需要炸开请告诉我
         df_s5.reset_index(drop=True, inplace=True)
 
         # ========================================================
-        # 步骤 D: 最终 13 列组装
+        # 步骤 D: 最终列组装（✅新增 N 列 = Sheet3 的 B 列）
         # ========================================================
-        # 目标顺序：
-        # A-L (来自 S3 和 S4)
-        # M: S5_L (新)
-        
         final_df = pd.concat([
             df_s3["S3_A"],    # A
             df_s3["S3_C"],    # B
@@ -121,7 +118,8 @@ if uploaded_file:
             df_s3["S3_AB"],   # J
             df_s3["S3_AC"],   # K
             df_s3["S3_AF"],   # L
-            df_s5["S5_L"]     # M (Sheet5 的 L 列)
+            df_s5["S5_L"],    # M (Sheet5 的 L 列)
+            df_s3["S3_B"],    # ✅ N (Sheet3 的 B 列)
         ], axis=1)
         
         final_df = final_df.replace("nan", "")
@@ -140,12 +138,13 @@ if uploaded_file:
         # ========================================================
         # 步骤 E: 预览与导出
         # ========================================================
-        st.subheader("📋 13列数据预览")
+        st.subheader("📋 数据预览")
         
         final_df.columns = [
             "A:产品", "B:C列", "C:S4-B", "D:ID", "E:S3-E", "F:S3-F",
             "G:S3-N", "H:S3-O", "I:S3-AE", "J:S3-AB", "K:S3-AC", "L:S3-AF",
-            "M:Sheet5-L列" 
+            "M:Sheet5-L列",
+            "N:Sheet3-B列"
         ]
         
         st.dataframe(final_df.head(15))
@@ -153,7 +152,7 @@ if uploaded_file:
         csv_data = final_df.to_csv(index=False, header=False, encoding='utf-8-sig').encode('utf-8-sig')
         
         st.download_button(
-            label="📥 下载 CSV (13列完整版)",
+            label="📥 下载 CSV (新增N列)",
             data=csv_data,
             file_name="13列数据提取结果.csv",
             mime="text/csv"
@@ -163,4 +162,3 @@ if uploaded_file:
         st.error(f"发生错误: {e}")
 else:
     st.info("👆 请上传文件")
-

@@ -2,7 +2,7 @@ import streamlit as st
 import pandas as pd
 import io
 
-st.set_page_config(page_title="数据清洗最终版", layout="wide")
+st.set_page_config(page_title="综合管理表格数据清洗", layout="wide")
 st.title("🏭 13列精准提取：S3 + S4 + S5(L)")
 st.markdown("### ✅ 配置更新：M 列改为提取 Sheet5 的 L 列")
 
@@ -163,3 +163,4 @@ if uploaded_file:
         st.error(f"发生错误: {e}")
 else:
     st.info("👆 请上传文件")
+
